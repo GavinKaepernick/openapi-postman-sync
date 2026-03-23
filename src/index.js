@@ -174,7 +174,7 @@ function saveConfig(config) {
     mkdirSync(CONFIGS_DIR, { recursive: true });
   }
 
-  // Save a portable version (with relative repoPath)
+  // Save a portable version (with relative repoPath, no secrets)
   const portable = {
     ...config,
     repoPath: undefined,
@@ -184,6 +184,16 @@ function saveConfig(config) {
   delete portable.generateSpecs;
   delete portable.generateEnvironments;
   delete portable.fileNamePrefix;
+
+  // Strip token/secret values from environment variables before saving
+  if (portable.environments) {
+    portable.environments = Object.fromEntries(
+      Object.entries(portable.environments).map(([key, env]) => [
+        key,
+        { name: env.name, baseUrl: env.baseUrl },
+      ])
+    );
+  }
 
   const configPath = join(CONFIGS_DIR, `${config.repoName}.json`);
   writeFileSync(configPath, JSON.stringify(portable, null, 2), 'utf-8');
