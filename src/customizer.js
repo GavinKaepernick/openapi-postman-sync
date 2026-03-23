@@ -28,9 +28,10 @@
  * Apply all customizations from config to a Postman collection.
  * @param {Object} collection - Postman Collection v2.1 object
  * @param {CustomizationConfig} config - Customization configuration
+ * @param {Object} [openApiSpec] - Parsed OpenAPI spec for enriching param defaults
  * @returns {Object} - Modified Postman collection
  */
-export function customizeCollection(collection, config = {}) {
+export function customizeCollection(collection, config = {}, openApiSpec = null) {
   let result = structuredClone(collection);
 
   // Override collection metadata
@@ -82,14 +83,31 @@ export function customizeCollection(collection, config = {}) {
     });
   }
 
-  // Disable query params by default
+  // Enrich query param values from the OpenAPI spec and disable by default
   if (config.disableQueryParams !== false) {
+    // Build a lookup of spec params by path+method for enrichment
+    const specParamLookup = openApiSpec ? buildSpecParamLookup(openApiSpec) : null;
+
     result.item = applyToAllRequests(result.item, (request) => {
       if (request.url && request.url.query) {
-        request.url.query = request.url.query.map(param => ({
-          ...param,
-          disabled: true,
-        }));
+        const requestPath = extractPath(request.url);
+        const method = (request.method || 'get').toLowerCase();
+        const specParams = specParamLookup?.[`${method}:${requestPath}`] || {};
+
+        request.url.query = request.url.query.map(param => {
+          const enriched = { ...param, disabled: true };
+
+          // If the param has no value or a generic placeholder, try the spec
+          if (specParams[param.key] && (!param.value || param.value === '<string>' || param.value === '')) {
+            const sp = specParams[param.key];
+            enriched.value = sp.value;
+            if (sp.description && !enriched.description) {
+              enriched.description = sp.description;
+            }
+          }
+
+          return enriched;
+        });
       }
       return request;
     });
@@ -252,6 +270,126 @@ function buildAuth(authConfig) {
       };
     default:
       return { type: 'noauth' };
+  }
+}
+
+/**
+ * Build a lookup of query param defaults from an OpenAPI spec.
+ * Returns { "get:/v1/parcels": { "page": { value: "1", description: "..." }, ... } }
+ */
+function buildSpecParamLookup(spec) {
+  const lookup = {};
+  const paths = spec?.paths || {};
+  const httpMethods = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']);
+
+  for (const [path, pathItem] of Object.entries(paths)) {
+    if (!pathItem || typeof pathItem !== 'object') continue;
+
+    // Path-level parameters
+    const pathParams = (pathItem.parameters || []).map(p =>
+      p.$ref ? resolveSpecRef(p.$ref, spec) : p
+    ).filter(Boolean);
+
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!httpMethods.has(method)) continue;
+
+      const resolvedOp = operation.$ref ? resolveSpecRef(operation.$ref, spec) : operation;
+      if (!resolvedOp) continue;
+
+      const opParams = (resolvedOp.parameters || []).map(p =>
+        p.$ref ? resolveSpecRef(p.$ref, spec) : p
+      ).filter(Boolean);
+
+      // Merge: operation params override path params
+      const opKeys = new Set(opParams.map(p => `${p.name}:${p.in}`));
+      const merged = [
+        ...pathParams.filter(p => !opKeys.has(`${p.name}:${p.in}`)),
+        ...opParams,
+      ];
+
+      const postmanPath = path.replace(/\{(\w+)\}/g, ':$1');
+      const key = `${method}:${postmanPath}`;
+      lookup[key] = {};
+
+      for (const p of merged) {
+        if (p.in !== 'query') continue;
+
+        const schema = p.schema
+          ? (p.schema.$ref ? resolveSpecRef(p.schema.$ref, spec) : p.schema)
+          : null;
+
+        // Best value: param example > param examples > schema default > schema example > schema enum > type fallback
+        let value = '';
+        if (p.example !== undefined) {
+          value = String(p.example);
+        } else if (p.examples) {
+          const firstKey = Object.keys(p.examples)[0];
+          if (firstKey) {
+            const ex = p.examples[firstKey]?.$ref
+              ? resolveSpecRef(p.examples[firstKey].$ref, spec)
+              : p.examples[firstKey];
+            if (ex?.value !== undefined) value = String(ex.value);
+          }
+        } else if (schema?.default !== undefined) {
+          value = String(schema.default);
+        } else if (schema?.example !== undefined) {
+          value = String(schema.example);
+        } else if (schema?.enum?.length > 0) {
+          value = String(schema.enum[0]);
+        } else if (schema?.type) {
+          value = getTypeFallback(schema, p.name);
+        }
+
+        // Build description
+        const descParts = [];
+        if (p.description) descParts.push(p.description);
+        if (schema?.enum?.length > 0) descParts.push(`Allowed: ${schema.enum.join(', ')}`);
+        if (p.required) descParts.push('Required');
+
+        lookup[key][p.name] = {
+          value,
+          description: descParts.join(' | '),
+        };
+      }
+    }
+  }
+
+  return lookup;
+}
+
+/**
+ * Resolve a $ref in the spec.
+ */
+function resolveSpecRef(ref, spec) {
+  if (!ref || !ref.startsWith('#/')) return null;
+  const parts = ref.replace('#/', '').split('/');
+  let current = spec;
+  for (const part of parts) {
+    current = current?.[part];
+    if (current === undefined) return null;
+  }
+  return current;
+}
+
+/**
+ * Generate a type-based fallback value for a query param.
+ */
+function getTypeFallback(schema, name) {
+  switch (schema.type) {
+    case 'integer': return '1';
+    case 'number': return '0.0';
+    case 'boolean': return 'true';
+    case 'string':
+      if (schema.format === 'uuid') return '00000000-0000-0000-0000-000000000000';
+      if (schema.format === 'date') return '2024-01-01';
+      if (schema.format === 'date-time') return '2024-01-01T00:00:00Z';
+      if (schema.format === 'email') return 'user@example.com';
+      if (name?.toLowerCase().includes('id')) return 'example-id';
+      return '';
+    case 'array':
+      return '';
+    default:
+      return '';
   }
 }
 

@@ -128,9 +128,15 @@ function generateEnvironmentFiles(repoName, environments, outputDir, extraVars =
   const savedPaths = [];
 
   for (const [key, envDef] of Object.entries(environments)) {
+    // Per-environment variables (e.g., bearerToken with different values per env)
+    const envVars = envDef.variables || {};
+
     const values = [
       { key: 'baseUrl', value: envDef.baseUrl, type: 'default', enabled: true },
-      ...extraVars.map(v => ({ key: v.key, value: v.value, type: 'default', enabled: true })),
+      ...Object.entries(envVars).map(([k, v]) => ({ key: k, value: v, type: 'secret', enabled: true })),
+      ...extraVars
+        .filter(v => !(v.key in envVars)) // Don't duplicate if already in per-env vars
+        .map(v => ({ key: v.key, value: v.value, type: 'default', enabled: true })),
     ];
 
     const env = {
@@ -182,7 +188,7 @@ function saveConfig(config) {
   const configPath = join(CONFIGS_DIR, `${config.repoName}.json`);
   writeFileSync(configPath, JSON.stringify(portable, null, 2), 'utf-8');
   console.log(`  ${c.green('✓')} Config saved: ${c.cyan(`configs/${config.repoName}.json`)}`);
-  console.log(`    Reuse with: ${c.bold(`generate_postman_collection --config ${config.repoName}`)}\n`);
+  console.log(`    Reuse with: ${c.bold(`npm start -- --config ${config.repoName}`)}\n`);
 }
 
 /**
@@ -336,11 +342,12 @@ async function main() {
   for (const spec of specs) {
     console.log(`  Converting: ${c.cyan(spec.name)}...`);
 
-    let collection = await convertToPostman(spec.content, spec.name);
+    const { collection: rawCollection, parsedSpec } = await convertToPostman(spec.content, spec.name);
+    let collection = rawCollection;
 
     if (config.customization) {
       console.log(`  ${c.dim('Applying customizations...')}`);
-      collection = customizeCollection(collection, config.customization);
+      collection = customizeCollection(collection, config.customization, parsedSpec);
     }
 
     const filename = `${spec.name}.postman_collection.json`;

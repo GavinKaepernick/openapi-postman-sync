@@ -22,15 +22,12 @@ Built for Stord services using `open_api_spex`.
 ```bash
 cd openapi-postman-sync
 
-# Install dependencies and link the CLI command
+# Install dependencies
 npm install
-npm link
 
 # Run the interactive wizard
-generate_postman_collection
+npm start
 ```
-
-If you prefer not to use `npm link`, you can run it directly with `node src/index.js`.
 
 The wizard will walk you through:
 1. Pointing to your Elixir project (e.g., `../parcel-service`)
@@ -48,16 +45,16 @@ Once you've run the wizard and a config is saved, skip the interactive setup:
 
 ```bash
 # Generate fresh specs and convert
-generate_postman_collection --config parcel-service
+npm start -- --config parcel-service
 
 # Skip spec generation (use existing spec files)
-generate_postman_collection --config parcel-service --no-generate
+npm start -- --config parcel-service --no-generate
 ```
 
 ## CLI options
 
 ```
-generate_postman_collection [options]
+npm start -- [options]
 
 Options:
   --config, -c <name>    Use a saved config from configs/ directory
@@ -109,7 +106,7 @@ openapi-postman-sync/
 The easiest way is to run the interactive wizard and point it at the new repo:
 
 ```bash
-node src/index.js
+npm start
 # Enter the path to your Elixir project when prompted
 ```
 
@@ -138,7 +135,7 @@ The wizard auto-detects everything from `mix.exs` and saves a config file when f
 }
 ```
 
-Then run: `generate_postman_collection --config my-service`
+Then run: `npm start -- --config my-service`
 
 ## Customization options
 

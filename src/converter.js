@@ -22,7 +22,7 @@ try {
  * Convert an OpenAPI spec string (YAML or JSON) to a Postman Collection v2.1 object.
  * @param {string} specContent - The OpenAPI spec as a string (YAML or JSON)
  * @param {string} specName - A human-readable name for this spec
- * @returns {Promise<Object>} - Postman Collection v2.1 object
+ * @returns {Promise<{collection: Object, parsedSpec: Object}>} - Postman Collection and parsed spec
  */
 export async function convertToPostman(specContent, specName) {
   // Parse the spec (needed for built-in converter and route counting)
@@ -48,7 +48,7 @@ export async function convertToPostman(specContent, specName) {
       console.warn(`  ⚠ Warning: ${specRouteCount - collectionRouteCount} route(s) may have been lost during conversion`);
     }
 
-    return collection;
+    return { collection, parsedSpec: spec };
   }
 
   // Fall back to built-in converter
@@ -61,7 +61,7 @@ export async function convertToPostman(specContent, specName) {
     console.warn(`  ⚠ Warning: ${specRouteCount - collectionRouteCount} route(s) may have been lost during conversion`);
   }
 
-  return collection;
+  return { collection, parsedSpec: spec };
 }
 
 /**
@@ -115,8 +115,9 @@ function convertWithNpmLib(converter, specContent, specName) {
     const conversionOptions = {
       folderStrategy: 'Tags',
       schemaFaker: true,
-      requestParametersResolution: 'Schema',
-      exampleParametersResolution: 'Schema',
+      requestParametersResolution: 'Example',
+      exampleParametersResolution: 'Example',
+      parametersResolution: 'Example',
       optimizeConversion: true,
       stackLimit: 50,
     };
@@ -252,12 +253,15 @@ function buildPostmanRequest(method, path, operation, baseUrl, spec) {
 
   const queryParams = params
     .filter(p => p.in === 'query')
-    .map(p => ({
-      key: p.name,
-      value: getExampleValue(p.schema ? (p.schema.$ref ? resolveRef(p.schema.$ref, spec) : p.schema) : null, p.name),
-      description: p.description || '',
-      disabled: true,
-    }));
+    .map(p => {
+      const resolvedSchema = p.schema ? (p.schema.$ref ? resolveRef(p.schema.$ref, spec) : p.schema) : null;
+      return {
+        key: p.name,
+        value: getParamValue(p, resolvedSchema, spec),
+        description: buildParamDescription(p, resolvedSchema),
+        disabled: true,
+      };
+    });
 
   const pathVars = params
     .filter(p => p.in === 'path')
@@ -322,6 +326,74 @@ function buildPostmanRequest(method, path, operation, baseUrl, spec) {
 }
 
 // ── Schema Examples ──
+
+/**
+ * Extract the best default value for a parameter, checking in order:
+ * 1. Parameter-level example
+ * 2. Parameter-level examples (first one)
+ * 3. Schema default
+ * 4. Schema example
+ * 5. Schema enum (first value)
+ * 6. Type-based fallback
+ */
+function getParamValue(param, resolvedSchema, spec) {
+  // Parameter-level example takes priority
+  if (param.example !== undefined) return String(param.example);
+
+  // Parameter-level examples map (use the first one)
+  if (param.examples) {
+    const firstKey = Object.keys(param.examples)[0];
+    if (firstKey) {
+      const ex = param.examples[firstKey];
+      const resolved = ex?.$ref ? resolveRef(ex.$ref, spec) : ex;
+      if (resolved?.value !== undefined) return String(resolved.value);
+    }
+  }
+
+  // Schema default
+  if (resolvedSchema?.default !== undefined) return String(resolvedSchema.default);
+
+  // Schema example
+  if (resolvedSchema?.example !== undefined) return String(resolvedSchema.example);
+
+  // Schema enum — use the first value
+  if (resolvedSchema?.enum?.length > 0) return String(resolvedSchema.enum[0]);
+
+  // Type-based fallback
+  return getExampleValue(resolvedSchema, param.name);
+}
+
+/**
+ * Build a rich description for a query param including type, enum values, and description.
+ */
+function buildParamDescription(param, resolvedSchema) {
+  const parts = [];
+
+  if (param.description) parts.push(param.description);
+
+  if (resolvedSchema) {
+    if (resolvedSchema.enum?.length > 0) {
+      parts.push(`Allowed: ${resolvedSchema.enum.join(', ')}`);
+    }
+    if (resolvedSchema.type && !param.description?.includes(resolvedSchema.type)) {
+      const typeInfo = resolvedSchema.format
+        ? `${resolvedSchema.type} (${resolvedSchema.format})`
+        : resolvedSchema.type;
+      parts.push(`Type: ${typeInfo}`);
+    }
+    if (resolvedSchema.minimum !== undefined || resolvedSchema.maximum !== undefined) {
+      const range = [
+        resolvedSchema.minimum !== undefined ? `min: ${resolvedSchema.minimum}` : null,
+        resolvedSchema.maximum !== undefined ? `max: ${resolvedSchema.maximum}` : null,
+      ].filter(Boolean).join(', ');
+      parts.push(`Range: ${range}`);
+    }
+  }
+
+  if (param.required) parts.push('Required');
+
+  return parts.join(' | ');
+}
 
 function getExampleValue(schema, name) {
   if (!schema) return '';

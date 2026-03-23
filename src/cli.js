@@ -12,33 +12,59 @@ import { resolve, join } from 'node:path';
 import { parseMixExs, printDetectedInfo } from './mix-parser.js';
 import { c, separator, stepHeader } from './colors.js';
 
-const rl = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+let rl = null;
+
+function ensureReadline() {
+  if (!rl) {
+    rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+  }
+  return rl;
+}
 
 function ask(question) {
   return new Promise((resolve) => {
-    rl.question(question, (answer) => {
+    ensureReadline().question(question, (answer) => {
       resolve(answer.trim());
     });
   });
 }
 
 function close() {
-  rl.close();
+  if (rl) {
+    rl.close();
+    rl = null;
+  }
 }
 
 /**
  * Display a styled header.
  */
-function header(text) {
-  const width = 60;
-  const line = '─'.repeat(width);
+function header() {
+  const line = c.dim('─'.repeat(60));
   console.log('');
-  console.log(c.dim(line));
-  console.log(c.bold(c.cyan(`  ${text}`)));
-  console.log(c.dim(line));
+  console.log(line);
+  console.log(c.cyan(`
+  ____           _
+ |  _ \\ ___  ___| |_ _ __ ___   __ _ _ __
+ | |_) / _ \\/ __| __| '_ \` _ \\ / _\` | '_ \\
+ |  __/ (_) \\__ \\ |_| | | | | | (_| | | | |
+ |_|   \\___/|___/\\__|_| |_| |_|\\__,_|_| |_|
+   ____      _ _           _   _
+  / ___|___ | | | ___  ___| |_(_) ___  _ __
+ | |   / _ \\| | |/ _ \\/ __| __| |/ _ \\| '_ \\
+ | |__| (_) | | |  __/ (__| |_| | (_) | | | |
+  \\____\\___/|_|_|\\___|\\___|\\___|_|\\___/|_| |_|
+   ____                           _
+  / ___| ___ _ __   ___ _ __ __ _| |_ ___  _ __
+ | |  _ / _ \\ '_ \\ / _ \\ '__/ _\` | __/ _ \\| '__|
+ | |_| |  __/ | | |  __/ | | (_| | || (_) | |
+  \\____|\\___|_| |_|\\___|_|  \\__,_|\\__\\___/|_|
+`));
+  console.log(`  ${c.dim('v1.0.0')}  ${c.dim('·')}  ${c.dim('OpenAPI → Postman')}`);
+  console.log(line);
 }
 
 /**
@@ -125,7 +151,7 @@ function loadExistingConfig(configsDir, repoName) {
  * @returns {Promise<Object>} - Complete run configuration
  */
 export async function runInteractiveSetup({ projectRoot, configsDir }) {
-  header('generate_postman_collection');
+  header();
 
   // ── Step 1: Get repo path ──
   stepHeader('Step 1', 'Project Path');
@@ -298,13 +324,18 @@ export async function runInteractiveSetup({ projectRoot, configsDir }) {
 
   console.log(`\n  Enter the base URL for each selected environment.\n`);
 
+  // Determine which auth variable to include per environment
+  const authVarName = auth?.tokenVariable || auth?.keyVariable || null;
+
   const environments = {};
   for (const env of selectedEnvs) {
+    const savedDef = savedEnvs[env.key] || {};
+
     if (env.defaultUrl) {
       const url = await ask(
         `  ${c.yellow('→')} ${c.bold(env.label)} base URL [${c.dim(env.defaultUrl)}]: `
       ) || env.defaultUrl;
-      environments[env.key] = { name: env.label, baseUrl: url };
+      environments[env.key] = { name: env.label, baseUrl: url, variables: savedDef.variables || {} };
     } else {
       let url = '';
       while (!url) {
@@ -313,8 +344,18 @@ export async function runInteractiveSetup({ projectRoot, configsDir }) {
         );
         if (!url) console.log(`  ${c.red('A URL is required for this environment.')}`);
       }
-      environments[env.key] = { name: env.label, baseUrl: url };
+      environments[env.key] = { name: env.label, baseUrl: url, variables: savedDef.variables || {} };
     }
+
+    // Ask for auth token value for this environment
+    if (authVarName) {
+      const savedVal = savedDef.variables?.[authVarName] || '';
+      const tokenVal = await ask(
+        `  ${c.yellow('→')} ${c.bold(env.label)} ${c.cyan(authVarName)} [${savedVal ? c.dim(savedVal.slice(0, 20) + (savedVal.length > 20 ? '...' : '')) : c.dim('empty')}]: `
+      ) || savedVal;
+      environments[env.key].variables[authVarName] = tokenVal;
+    }
+    console.log('');
   }
 
   close();
