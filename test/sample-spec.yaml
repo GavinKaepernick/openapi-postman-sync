@@ -1,0 +1,371 @@
+openapi: "3.0.0"
+info:
+  title: Parcel Service Internal API
+  version: "1.0.0"
+  description: Stord Parcel Service - Internal API for managing carriers, parcels, billing, and fulfillment.
+
+servers:
+  - url: http://localhost:4000
+    description: Local development
+  - url: https://parcel-service.staging.stord.com
+    description: Staging
+
+paths:
+  /v1/carriers:
+    get:
+      tags:
+        - Carriers
+      summary: List carriers
+      operationId: listCarriers
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+          description: Page number
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+          description: Items per page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search term
+      responses:
+        "200":
+          description: Success
+    post:
+      tags:
+        - Carriers
+      summary: Create a carrier
+      operationId: createCarrier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CarrierRequest"
+      responses:
+        "201":
+          description: Created
+
+  /v1/carriers/{carrier_id}:
+    get:
+      tags:
+        - Carriers
+      summary: Get a carrier
+      operationId: getCarrier
+      parameters:
+        - name: carrier_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Success
+    put:
+      tags:
+        - Carriers
+      summary: Update a carrier
+      operationId: updateCarrier
+      parameters:
+        - name: carrier_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CarrierRequest"
+      responses:
+        "200":
+          description: Updated
+
+  /v1/carriers/{carrier_id}/carrier_invoice_types:
+    get:
+      tags:
+        - Carrier Invoice Types
+      summary: List carrier invoice types
+      operationId: listCarrierInvoiceTypes
+      parameters:
+        - name: carrier_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Success
+    post:
+      tags:
+        - Carrier Invoice Types
+      summary: Create a carrier invoice type
+      operationId: createCarrierInvoiceType
+      parameters:
+        - name: carrier_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CarrierInvoiceTypeRequest"
+      responses:
+        "201":
+          description: Created
+
+  /v1/parcels:
+    get:
+      tags:
+        - Parcels
+      summary: List parcels
+      operationId: listParcels
+      parameters:
+        - name: organization_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by organization
+        - name: tracking_number
+          in: query
+          schema:
+            type: string
+          description: Filter by tracking number
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - pending
+              - in_transit
+              - delivered
+          description: Filter by status
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+
+  /v1/parcels/{parcel_id}:
+    get:
+      tags:
+        - Parcels
+      summary: Get a parcel
+      operationId: getParcel
+      parameters:
+        - name: parcel_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Success
+
+  /v1/fulfillment_centers:
+    get:
+      tags:
+        - Fulfillment Centers
+      summary: List fulfillment centers
+      operationId: listFulfillmentCenters
+      parameters:
+        - name: organization_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Success
+    post:
+      tags:
+        - Fulfillment Centers
+      summary: Create a fulfillment center
+      operationId: createFulfillmentCenter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FulfillmentCenterRequest"
+      responses:
+        "201":
+          description: Created
+
+  /v1/service_methods:
+    get:
+      tags:
+        - Service Methods
+      summary: List service methods
+      operationId: listServiceMethods
+      parameters:
+        - name: carrier_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by carrier
+      responses:
+        "200":
+          description: Success
+
+  /v1/audit/invoices:
+    get:
+      tags:
+        - Auditing
+      summary: List audit invoices
+      operationId: listAuditInvoices
+      parameters:
+        - name: carrier_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+    post:
+      tags:
+        - Auditing
+      summary: Import an audit invoice
+      operationId: importAuditInvoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuditInvoiceImport"
+      responses:
+        "201":
+          description: Created
+
+  /v1/accessorials:
+    get:
+      tags:
+        - Accessorials
+      summary: List accessorials
+      operationId: listAccessorials
+      responses:
+        "200":
+          description: Success
+
+  /v1/rate_cards:
+    get:
+      tags:
+        - Rate Cards
+      summary: List rate cards
+      operationId: listRateCards
+      parameters:
+        - name: carrier_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Success
+
+components:
+  schemas:
+    CarrierRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "UPS"
+        code:
+          type: string
+          example: "ups"
+        scac:
+          type: string
+          example: "UPSN"
+        active:
+          type: boolean
+          example: true
+
+    CarrierInvoiceTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Ground Shipment"
+        code:
+          type: string
+          example: "ground"
+        description:
+          type: string
+          example: "Standard ground shipping invoice"
+
+    FulfillmentCenterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "ATL Warehouse"
+        organization_id:
+          type: string
+          format: uuid
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+              example: "123 Logistics Way"
+            city:
+              type: string
+              example: "Atlanta"
+            state:
+              type: string
+              example: "GA"
+            zip:
+              type: string
+              example: "30301"
+
+    AuditInvoiceImport:
+      type: object
+      properties:
+        carrier_id:
+          type: string
+          format: uuid
+        carrier_invoice_type_id:
+          type: string
+          format: uuid
+        invoice_number:
+          type: string
+          example: "INV-2024-001"
+        invoice_date:
+          type: string
+          format: date
+          example: "2024-01-15"
+        total_amount:
+          type: number
+          example: 1250.00

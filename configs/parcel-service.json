@@ -1,0 +1,36 @@
+{
+  "repoName": "parcel-service",
+  "mixCommands": [
+    "api_docs"
+  ],
+  "specFiles": {
+    "parcel-service": "priv/documentation/parcel.open-api.yaml"
+  },
+  "environments": {
+    "staging": {
+      "name": "Staging",
+      "baseUrl": "https://api.staging.parcel.stord.com"
+    }
+  },
+  "customization": {
+    "collectionName": "Parcel Service",
+    "disableQueryParams": true,
+    "sortByName": true,
+    "auth": {
+      "type": "bearer",
+      "tokenVariable": "bearerToken"
+    },
+    "headerDefaults": {
+      "Accept": "application/json"
+    },
+    "excludePaths": [
+      "/docs/*",
+      "/internal/*",
+      "/webhooks/*"
+    ],
+    "excludeTags": [],
+    "folderOverrides": {},
+    "additionalVariables": []
+  },
+  "relativeRepoPath": "/Users/gavinkaepernick/Development/Code/STORD/parcel-service"
+}

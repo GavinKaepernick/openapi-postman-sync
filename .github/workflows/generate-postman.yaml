@@ -1,0 +1,78 @@
+---
+name: Generate Postman Collection
+
+on:
+  # Trigger when called from other repos (e.g., parcel-service)
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Target repo config name (e.g., parcel-service)"
+        required: true
+        default: "parcel-service"
+      generate_specs:
+        description: "Run mix commands to generate fresh specs"
+        required: false
+        default: "true"
+
+  # Can also be triggered by a repository_dispatch event from CI/CD
+  repository_dispatch:
+    types: [generate-postman]
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout openapi-postman-sync
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          repository: stordco/${{ github.event.inputs.repo || github.event.client_payload.repo || 'parcel-service' }}
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          path: target-repo
+
+      - name: Setup Elixir (if generating specs)
+        if: github.event.inputs.generate_specs == 'true'
+        uses: stordco/actions-elixir/setup@v1
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          hex-token: ${{ secrets.HEX_API_KEY }}
+          oban-fingerprint: ${{ secrets.OBAN_KEY_FINGERPRINT }}
+          oban-token: ${{ secrets.OBAN_LICENSE_KEY }}
+
+      - name: Generate specs and convert
+        env:
+          REPO_CONFIG: ${{ github.event.inputs.repo || github.event.client_payload.repo || 'parcel-service' }}
+          GENERATE: ${{ github.event.inputs.generate_specs || 'true' }}
+        run: |
+          if [ "$GENERATE" = "true" ]; then
+            node src/index.js --config "$REPO_CONFIG"
+          else
+            node src/index.js --config "$REPO_CONFIG" --no-generate
+          fi
+
+      - name: Upload Postman collection artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-collections
+          path: output/*.json
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          echo "## Generated Postman Files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          for f in output/*.json; do
+            size=$(du -h "$f" | cut -f1)
+            echo "- \`$(basename $f)\` ($size)" >> $GITHUB_STEP_SUMMARY
+          done
