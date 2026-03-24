@@ -13,12 +13,12 @@
     }
   },
   "customization": {
-    "collectionName": "Parcel Service",
+    "collectionName": "Parcel Service Demo",
     "disableQueryParams": true,
     "sortByName": true,
     "auth": {
       "type": "bearer",
-      "tokenVariable": "bearerToken"
+      "tokenVariable": "BearerToken_Demo"
     },
     "headerDefaults": {
       "Accept": "application/json"
@@ -30,7 +30,18 @@
     ],
     "excludeTags": [],
     "folderOverrides": {},
-    "additionalVariables": []
+    "additionalVariables": [
+      {
+        "key": "TESTVARIABLE",
+        "value": "TESTING",
+        "type": "string"
+      },
+      {
+        "key": "STORD_VARIABLE",
+        "value": "stord",
+        "type": "string"
+      }
+    ]
   },
   "relativeRepoPath": "/Users/gavinkaepernick/Development/Code/STORD/parcel-service"
 }
