@@ -9,7 +9,9 @@
   },
   "scripts": {
     "start": "node src/index.js",
+    "help": "node src/index.js --help",
     "generate": "node src/index.js --non-interactive",
+    "generate:config": "node src/index.js --config",
     "test": "node --test test/*.test.js",
     "test:coverage": "node --test --experimental-test-coverage test/*.test.js"
   },

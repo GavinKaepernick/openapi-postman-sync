@@ -280,7 +280,7 @@ describe('customizeCollection', () => {
   });
 
   describe('deduplicate names', () => {
-    it('appends method to duplicate names', () => {
+    it('leaves different-method duplicates unchanged', () => {
       const col = makeCollection([
         makeFolder('Carriers', [
           makeRequest('Update Carrier', 'PUT', '/v1/carriers/:id'),
@@ -289,8 +289,23 @@ describe('customizeCollection', () => {
       ]);
       const result = customizeCollection(col, { disableQueryParams: false });
       const names = result.item[0].item.map(i => i.name);
-      assert.ok(names.includes('Update Carrier (PUT)'));
-      assert.ok(names.includes('Update Carrier (PATCH)'));
+      // PUT and PATCH are different methods — Postman shows the method badge,
+      // so no renaming is needed
+      assert.ok(names.includes('Update Carrier'));
+      assert.equal(names.filter(n => n === 'Update Carrier').length, 2);
+    });
+
+    it('appends path hint to same-method duplicates', () => {
+      const col = makeCollection([
+        makeFolder('Parcels', [
+          makeRequest('List Parcels', 'GET', '/v1/parcels'),
+          makeRequest('List Parcels', 'GET', '/public/v1/parcels'),
+        ]),
+      ]);
+      const result = customizeCollection(col, { disableQueryParams: false });
+      const names = result.item[0].item.map(i => i.name);
+      assert.ok(names[0] !== names[1], `Expected different names but got: ${names}`);
+      assert.ok(names.every(n => n.startsWith('List Parcels')));
     });
 
     it('leaves unique names unchanged', () => {

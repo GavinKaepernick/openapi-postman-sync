@@ -103,9 +103,9 @@ function printHelp() {
     --help, -h             Show this help message
 
   Examples:
-    node src/index.js                                  # Interactive wizard
-    node src/index.js -c parcel-service                # Use parcel-service config
-    node src/index.js -c parcel-service --no-generate  # Skip mix, use existing specs
+    npm start                                          # Interactive wizard
+    npm run generate:config parcel-service             # Use parcel-service config
+    npm start -- -c parcel-service --no-generate       # Skip mix, use existing specs
 
   Output structure:
     collections/<service>/           Generated Postman collection files
@@ -198,7 +198,7 @@ function saveConfig(config) {
   const configPath = join(CONFIGS_DIR, `${config.repoName}.json`);
   writeFileSync(configPath, JSON.stringify(portable, null, 2), 'utf-8');
   console.log(`  ${c.green('✓')} Config saved: ${c.cyan(`configs/${config.repoName}.json`)}`);
-  console.log(`    Reuse with: ${c.bold(`npm start -- --config ${config.repoName}`)}\n`);
+  console.log(`    Reuse with: ${c.bold(`npm run generate:config ${config.repoName}`)}\n`);
 }
 
 /**

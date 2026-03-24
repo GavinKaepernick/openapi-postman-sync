@@ -45,7 +45,7 @@ Once you've run the wizard and a config is saved, skip the interactive setup:
 
 ```bash
 # Generate fresh specs and convert
-npm start -- --config parcel-service
+npm run generate:config parcel-service
 
 # Skip spec generation (use existing spec files)
 npm start -- --config parcel-service --no-generate
@@ -54,9 +54,12 @@ npm start -- --config parcel-service --no-generate
 ## CLI options
 
 ```
-npm start -- [options]
+npm start                                  # Interactive wizard
+npm run help                               # Show help
+npm run generate:config <name>             # Use a saved config
+npm start -- --config <name> --no-generate # Skip spec generation
 
-Options:
+All options (via npm start -- [options]):
   --config, -c <name>    Use a saved config from configs/ directory
   --repo, -r <path>      Path to Elixir project (non-interactive mode)
   --no-generate          Skip OpenAPI spec generation (use existing files)
@@ -148,7 +151,7 @@ The wizard auto-detects everything from `mix.exs` and saves a config file when f
 }
 ```
 
-Then run: `npm start -- --config my-service`
+Then run: `npm run generate:config my-service`
 
 ## Customization options
 
@@ -166,10 +169,10 @@ Then run: `npm start -- --config my-service`
 
 ## Request name deduplication
 
-When multiple requests in the same folder share a name (e.g., two "Update Carrier" from PUT vs PATCH), the tool automatically disambiguates them by appending the HTTP method and, if needed, a path hint:
+When multiple requests in the same folder share both a name and HTTP method (e.g., two GET "List Parcels" from different path prefixes), the tool disambiguates them by appending a path hint. Requests with different methods (e.g., PUT and PATCH "Update Carrier") are left as-is since Postman already shows the method badge next to each request.
 
-- `Update Carrier` → `Update Carrier (PUT)` and `Update Carrier (PATCH)`
-- `List Parcels` → `List Parcels (GET /v1/.../parcels)` and `List Parcels (GET /public/v1/.../parcels)`
+- `List Parcels` (GET `/v1/parcels`) → `List Parcels (/v1/parcels)`
+- `List Parcels` (GET `/public/v1/parcels`) → `List Parcels (/public/v1/parcels)`
 
 ## CI/CD
 

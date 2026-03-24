@@ -133,14 +133,14 @@ export function customizeCollection(collection, config = {}, openApiSpec = null)
 /**
  * Deduplicate request names within each folder.
  *
- * When multiple requests in the same folder share a name (e.g., two "Update Carrier"
- * from PUT vs PATCH, or "List Parcels" from public vs internal endpoints), this
- * disambiguates them by appending context from the HTTP method and path.
+ * Only disambiguates when multiple requests share the same name AND the same
+ * HTTP method (e.g., two GET "List Parcels" from different path prefixes).
+ * Requests with different methods (e.g., PUT "Update Carrier" vs PATCH "Update Carrier")
+ * are left as-is since Postman already shows the method badge next to each request.
  *
  * Strategy:
- * 1. Find all name collisions within a folder
- * 2. For collisions, try appending the HTTP method (e.g., "Update Carrier (PUT)")
- * 3. If still not unique, append a path hint (e.g., "List Parcels (GET /public/v1/...)")
+ * 1. Find all name + method collisions within a folder
+ * 2. For collisions, append a path hint (e.g., "List Parcels (/public/v1/...)")
  */
 function deduplicateNames(items) {
   return items.map(item => {
@@ -149,42 +149,32 @@ function deduplicateNames(items) {
     // Recursively deduplicate nested folders
     const children = deduplicateNames(item.item);
 
-    // Count name occurrences
-    const nameCounts = {};
+    // Count name + method occurrences
+    const nameMethodCounts = {};
     for (const child of children) {
       if (!child.request) continue;
-      const name = child.name || '';
-      nameCounts[name] = (nameCounts[name] || 0) + 1;
+      const key = `${child.name || ''}::${child.request.method || ''}`;
+      nameMethodCounts[key] = (nameMethodCounts[key] || 0) + 1;
     }
 
-    // Find which names have duplicates
-    const dupeNames = new Set(
-      Object.entries(nameCounts).filter(([, c]) => c > 1).map(([n]) => n)
+    // Find which name+method combos have duplicates
+    const dupeKeys = new Set(
+      Object.entries(nameMethodCounts).filter(([, c]) => c > 1).map(([k]) => k)
     );
 
-    if (dupeNames.size === 0) return { ...item, item: children };
+    if (dupeKeys.size === 0) return { ...item, item: children };
 
-    // Disambiguate
+    // Disambiguate by appending a path hint
     const renamed = children.map(child => {
-      if (!child.request || !dupeNames.has(child.name)) return child;
+      if (!child.request) return child;
 
-      const method = child.request.method || '';
+      const key = `${child.name || ''}::${child.request.method || ''}`;
+      if (!dupeKeys.has(key)) return child;
+
       const path = extractPathForName(child.request.url);
+      if (!path) return child;
 
-      // First try: "Name (METHOD)"
-      let newName = `${child.name} (${method})`;
-
-      // Check if method alone is enough by looking ahead
-      const sameNameAndMethod = children.filter(c =>
-        c.request && c.name === child.name && c.request.method === method
-      );
-
-      if (sameNameAndMethod.length > 1 && path) {
-        // Method alone isn't unique — add a path hint
-        newName = `${child.name} (${method} ${path})`;
-      }
-
-      return { ...child, name: newName };
+      return { ...child, name: `${child.name} (${path})` };
     });
 
     return { ...item, item: renamed };
