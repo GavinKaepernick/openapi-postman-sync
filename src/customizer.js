@@ -97,11 +97,11 @@ export function customizeCollection(collection, config = {}, openApiSpec = null)
         request.url.query = request.url.query.map(param => {
           const enriched = { ...param, disabled: true };
 
-          // If the param has no value or a generic placeholder, try the spec
-          if (specParams[param.key] && (!param.value || param.value === '<string>' || param.value === '')) {
+          // Always prefer spec-derived values over schemaFaker generated junk
+          if (specParams[param.key]) {
             const sp = specParams[param.key];
             enriched.value = sp.value;
-            if (sp.description && !enriched.description) {
+            if (sp.description) {
               enriched.description = sp.description;
             }
           }
@@ -275,7 +275,11 @@ function buildAuth(authConfig) {
 
 /**
  * Build a lookup of query param defaults from an OpenAPI spec.
- * Returns { "get:/v1/parcels": { "page": { value: "1", description: "..." }, ... } }
+ *
+ * Handles both simple params (e.g., "limit") and exploded deepObject params
+ * (e.g., a "filter" object with properties becomes "filter[carrier_id]", "filter[rate_type]", etc.)
+ *
+ * Returns { "get:/v1/parcels": { "limit": { value, description }, "filter[carrier_id]": { ... } } }
  */
 function buildSpecParamLookup(spec) {
   const lookup = {};
@@ -311,6 +315,9 @@ function buildSpecParamLookup(spec) {
       const key = `${method}:${postmanPath}`;
       lookup[key] = {};
 
+      // Extract sortable fields from sort param descriptions for this endpoint
+      let sortableFields = null;
+
       for (const p of merged) {
         if (p.in !== 'query') continue;
 
@@ -318,43 +325,127 @@ function buildSpecParamLookup(spec) {
           ? (p.schema.$ref ? resolveSpecRef(p.schema.$ref, spec) : p.schema)
           : null;
 
-        // Best value: param example > param examples > schema default > schema example > schema enum > type fallback
-        let value = '';
-        if (p.example !== undefined) {
-          value = String(p.example);
-        } else if (p.examples) {
-          const firstKey = Object.keys(p.examples)[0];
-          if (firstKey) {
-            const ex = p.examples[firstKey]?.$ref
-              ? resolveSpecRef(p.examples[firstKey].$ref, spec)
-              : p.examples[firstKey];
-            if (ex?.value !== undefined) value = String(ex.value);
+        // Handle exploded deepObject params (e.g., filter with style: deepObject)
+        if (p.style === 'deepObject' && p.explode && schema?.type === 'object' && schema.properties) {
+          for (const [propName, propSchema] of Object.entries(schema.properties)) {
+            const resolved = propSchema.$ref ? resolveSpecRef(propSchema.$ref, spec) : propSchema;
+            const flatKey = `${p.name}[${propName}]`;
+            const { value, description } = getSmartParamValue(resolved, propName, spec);
+            lookup[key][flatKey] = { value, description };
           }
-        } else if (schema?.default !== undefined) {
-          value = String(schema.default);
-        } else if (schema?.example !== undefined) {
-          value = String(schema.example);
-        } else if (schema?.enum?.length > 0) {
-          value = String(schema.enum[0]);
-        } else if (schema?.type) {
-          value = getTypeFallback(schema, p.name);
+          continue;
         }
 
-        // Build description
-        const descParts = [];
-        if (p.description) descParts.push(p.description);
-        if (schema?.enum?.length > 0) descParts.push(`Allowed: ${schema.enum.join(', ')}`);
-        if (p.required) descParts.push('Required');
+        // Extract sortable fields from description (used to build sort default)
+        if (p.name === 'sort' && p.description) {
+          sortableFields = extractSortableFields(p.description);
+        }
 
-        lookup[key][p.name] = {
-          value,
-          description: descParts.join(' | '),
-        };
+        const { value, description } = getSmartParamValue(schema, p.name, spec, p, sortableFields);
+        lookup[key][p.name] = { value, description };
       }
     }
   }
 
   return lookup;
+}
+
+/**
+ * Extract sortable field names from a sort parameter description.
+ * Looks for backtick-quoted field names like `field_name`.
+ */
+function extractSortableFields(description) {
+  const matches = description.match(/`([a-z_]+)`/g);
+  if (matches && matches.length > 0) {
+    return matches.map(m => m.replace(/`/g, ''));
+  }
+  return null;
+}
+
+/**
+ * Derive a useful default value for a query parameter from the OpenAPI spec.
+ */
+function getSmartParamValue(schema, paramName, spec, param = null, sortableFields = null) {
+  const descParts = [];
+  if (param?.description) descParts.push(param.description);
+  else if (schema?.description) descParts.push(schema.description);
+
+  // Parameter-level example takes priority
+  if (param?.example !== undefined) {
+    return { value: String(param.example), description: descParts.join(' | ') };
+  }
+  if (param?.examples) {
+    const firstKey = Object.keys(param.examples)[0];
+    if (firstKey) {
+      const ex = param.examples[firstKey]?.$ref
+        ? resolveSpecRef(param.examples[firstKey].$ref, spec)
+        : param.examples[firstKey];
+      if (ex?.value !== undefined) {
+        return { value: String(ex.value), description: descParts.join(' | ') };
+      }
+    }
+  }
+
+  // Schema-level example/default
+  if (schema?.default !== undefined) return { value: String(schema.default), description: descParts.join(' | ') };
+  if (schema?.example !== undefined) return { value: String(schema.example), description: descParts.join(' | ') };
+
+  // Enum — show first value, list all in description
+  if (schema?.enum?.length > 0) {
+    descParts.push(`Allowed: ${schema.enum.join(', ')}`);
+    return { value: String(schema.enum[0]), description: descParts.join(' | ') };
+  }
+
+  // Array of enums (e.g., filter[effective] with items.enum)
+  if (schema?.type === 'array' && schema.items?.enum?.length > 0) {
+    descParts.push(`Allowed: ${schema.items.enum.join(', ')}`);
+    return { value: String(schema.items.enum[0]), description: descParts.join(' | ') };
+  }
+
+  // Name-aware smart defaults for common pagination/sort params
+  const nameLower = paramName.toLowerCase();
+
+  if (nameLower === 'limit') {
+    return { value: '25', description: descParts.join(' | ') || 'Number of items to return' };
+  }
+  if (nameLower === 'before' || nameLower === 'after') {
+    return { value: '', description: descParts.join(' | ') || 'Cursor for pagination' };
+  }
+  if (nameLower === 'sort') {
+    // Build a useful sort example from the sortable fields
+    if (sortableFields && sortableFields.length > 0) {
+      descParts.push(`Sortable: ${sortableFields.join(', ')}`);
+      return { value: `${sortableFields[0]}:asc`, description: descParts.join(' | ') };
+    }
+    return { value: 'inserted_at:desc', description: descParts.join(' | ') };
+  }
+  if (nameLower === 'page') {
+    return { value: '1', description: descParts.join(' | ') || 'Page number' };
+  }
+  if (nameLower === 'per_page' || nameLower === 'page_size') {
+    return { value: '25', description: descParts.join(' | ') || 'Items per page' };
+  }
+
+  // Format-aware defaults
+  if (schema?.format === 'uuid' || nameLower.endsWith('_id') || nameLower === 'id') {
+    return { value: '{{id}}', description: descParts.join(' | ') };
+  }
+  if (schema?.format === 'date') {
+    return { value: '2024-01-01', description: descParts.join(' | ') };
+  }
+  if (schema?.format === 'date-time') {
+    return { value: '2024-01-01T00:00:00Z', description: descParts.join(' | ') };
+  }
+
+  // Basic type fallbacks
+  if (schema?.type === 'integer' || schema?.type === 'number') {
+    return { value: '', description: descParts.join(' | ') };
+  }
+  if (schema?.type === 'boolean') {
+    return { value: 'true', description: descParts.join(' | ') };
+  }
+
+  return { value: '', description: descParts.join(' | ') };
 }
 
 /**
@@ -369,28 +460,6 @@ function resolveSpecRef(ref, spec) {
     if (current === undefined) return null;
   }
   return current;
-}
-
-/**
- * Generate a type-based fallback value for a query param.
- */
-function getTypeFallback(schema, name) {
-  switch (schema.type) {
-    case 'integer': return '1';
-    case 'number': return '0.0';
-    case 'boolean': return 'true';
-    case 'string':
-      if (schema.format === 'uuid') return '00000000-0000-0000-0000-000000000000';
-      if (schema.format === 'date') return '2024-01-01';
-      if (schema.format === 'date-time') return '2024-01-01T00:00:00Z';
-      if (schema.format === 'email') return 'user@example.com';
-      if (name?.toLowerCase().includes('id')) return 'example-id';
-      return '';
-    case 'array':
-      return '';
-    default:
-      return '';
-  }
 }
 
 /**

@@ -347,13 +347,9 @@ export async function runInteractiveSetup({ projectRoot, configsDir }) {
       environments[env.key] = { name: env.label, baseUrl: url, variables: savedDef.variables || {} };
     }
 
-    // Ask for auth token value for this environment
+    // Include auth variable placeholder in the environment (no value — user fills in Postman)
     if (authVarName) {
-      const savedVal = savedDef.variables?.[authVarName] || '';
-      const tokenVal = await ask(
-        `  ${c.yellow('→')} ${c.bold(env.label)} ${c.cyan(authVarName)} [${savedVal ? c.dim(savedVal.slice(0, 20) + (savedVal.length > 20 ? '...' : '')) : c.dim('empty')}]: `
-      ) || savedVal;
-      environments[env.key].variables[authVarName] = tokenVal;
+      environments[env.key].variables[authVarName] = '';
     }
     console.log('');
   }
