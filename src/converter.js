@@ -142,7 +142,7 @@ function convertWithNpmLib(converter, specContent, specName) {
 /**
  * Built-in converter: transforms an OpenAPI spec object into Postman Collection v2.1 format.
  */
-function convertBuiltIn(spec, specName) {
+export function convertBuiltIn(spec, specName) {
   const info = spec.info || {};
   const servers = spec.servers || [];
   const paths = spec.paths || {};
@@ -211,7 +211,7 @@ function convertBuiltIn(spec, specName) {
  * Resolve a $ref string to the referenced object in the spec.
  * Handles JSON Pointer format: "#/components/schemas/Foo"
  */
-function resolveRef(ref, spec) {
+export function resolveRef(ref, spec) {
   if (!ref || !ref.startsWith('#/')) return null;
   const parts = ref.replace('#/', '').split('/');
   let current = spec;
@@ -416,7 +416,7 @@ function getExampleValue(schema, name) {
   }
 }
 
-function generateExampleFromSchema(schema, spec, depth = 0) {
+export function generateExampleFromSchema(schema, spec, depth = 0) {
   if (depth > 8) return {};
 
   // Handle $ref

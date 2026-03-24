@@ -118,7 +118,7 @@ function yamlToJsonViaShell(text) {
  *
  * Use js-yaml or python3 for reliable parsing.
  */
-function fallbackParseYaml(text) {
+export function fallbackParseYaml(text) {
   const lines = text.split('\n');
   return parseBlock(lines, 0, -1).value;
 }

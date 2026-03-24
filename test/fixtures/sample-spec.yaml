@@ -1,0 +1,195 @@
+openapi: "3.0.0"
+info:
+  title: "Test API"
+  version: "1.0.0"
+  description: "A test API for unit tests"
+servers:
+  - url: "http://localhost:4000"
+paths:
+  /v1/carriers:
+    get:
+      tags:
+        - Carriers
+      summary: "List Carriers"
+      operationId: "listCarriers"
+      parameters:
+        - name: limit
+          in: query
+          description: "The number of items to return"
+          schema:
+            type: integer
+        - name: sort
+          in: query
+          description: "Sort by `name`, `inserted_at`. Use `field:asc` or `field:desc`."
+          schema:
+            type: string
+        - name: "filter"
+          in: query
+          style: deepObject
+          explode: true
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                enum:
+                  - active
+                  - inactive
+                description: "Filter by carrier status"
+              name:
+                type: string
+                example: "FedEx"
+                description: "Filter by carrier name"
+      responses:
+        "200":
+          description: "Success"
+    post:
+      tags:
+        - Carriers
+      summary: "Create Carrier"
+      operationId: "createCarrier"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CarrierRequest"
+      responses:
+        "201":
+          description: "Created"
+  /v1/carriers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Carriers
+      summary: "Get Carrier"
+      operationId: "getCarrier"
+      responses:
+        "200":
+          description: "Success"
+    put:
+      tags:
+        - Carriers
+      summary: "Update Carrier"
+      operationId: "updateCarrierPut"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CarrierRequest"
+      responses:
+        "200":
+          description: "Success"
+    patch:
+      tags:
+        - Carriers
+      summary: "Update Carrier"
+      operationId: "updateCarrierPatch"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CarrierRequest"
+      responses:
+        "200":
+          description: "Success"
+  /v1/parcels:
+    get:
+      tags:
+        - Parcels
+      summary: "List Parcels"
+      operationId: "listParcels"
+      parameters:
+        - name: before
+          in: query
+          schema:
+            type: string
+        - name: after
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: filter
+          in: query
+          style: deepObject
+          explode: true
+          schema:
+            type: object
+            properties:
+              shipper_id:
+                type: string
+                format: uuid
+              effective:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - active
+                    - future
+                    - expired
+                description: "Filter by effective status"
+      responses:
+        "200":
+          description: "Success"
+  /v1/parcels/{parcel_id}:
+    get:
+      tags:
+        - Parcels
+      summary: "Get Parcel"
+      operationId: "getParcel"
+      parameters:
+        - name: parcel_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Success"
+  /docs/openapi:
+    get:
+      tags:
+        - Documentation
+      summary: "OpenAPI Docs"
+      responses:
+        "200":
+          description: "Docs page"
+  /webhooks/delivery:
+    post:
+      tags:
+        - Webhooks
+      summary: "Delivery Webhook"
+      responses:
+        "200":
+          description: "OK"
+  /internal/health:
+    get:
+      tags:
+        - Internal
+      summary: "Health Check"
+      responses:
+        "200":
+          description: "OK"
+components:
+  schemas:
+    CarrierRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "FedEx"
+        code:
+          type: string
+          example: "FEDEX"
+        active:
+          type: boolean
+          example: true

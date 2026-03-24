@@ -9,7 +9,9 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "generate": "node src/index.js --non-interactive"
+    "generate": "node src/index.js --non-interactive",
+    "test": "node --test test/*.test.js",
+    "test:coverage": "node --test --experimental-test-coverage test/*.test.js"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",

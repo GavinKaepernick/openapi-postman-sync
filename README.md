@@ -94,6 +94,19 @@ openapi-postman-sync/
     └── generate-postman.yaml
 ```
 
+## Testing
+
+```bash
+# Run the full test suite
+npm test
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run a specific test file
+node --test test/customizer.test.js
+```
+
 ## Importing into Postman
 
 1. Open Postman → **Import** → **Upload Files**
